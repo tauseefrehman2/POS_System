@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CashierController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PaymentController;
@@ -20,6 +21,11 @@ Route::post('login', [AuthController::class, 'login']);
 Route::get('/customers/filter', [CustomerController::class, 'filter']);
 
 Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/dashboard-summary', [DashboardController::class, 'summary']);
+    Route::get('/sales-report', [DashboardController::class, 'salesReport']);
+    Route::get('/cashier-report', [DashboardController::class, 'cashierReport']);
+    Route::get('/product-report', [DashboardController::class, 'productReport']);
+
     Route::resource('products', ProductController::class);
     Route::get('/products/search', [ProductController::class, 'search']);
     Route::get('product/quantity', [ProductController::class, 'getQuantity']);
