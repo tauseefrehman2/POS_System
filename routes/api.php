@@ -27,7 +27,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/supplier/payment', [SupplierPaymentController::class, 'store']);
     Route::get('/users/payment-history', [PaymentController::class, 'userPaymentHistory']);
 
-    Route::get('/dashboard-summary', [DashboardController::class, 'summary']);
+    Route::get('/dashboard', [DashboardController::class, 'dashboard']);
+    Route::get('/payment/reminder', [DashboardController::class, 'overdueCustomers']);
+    Route::get('/stock/reminder', [DashboardController::class, 'lowStockProducts']);
+    Route::get('/detailed/report', [DashboardController::class, 'summary']);
     Route::get('/sales-report', [DashboardController::class, 'salesReport']);
     Route::get('/cashier-report', [DashboardController::class, 'cashierReport']);
     Route::get('/product-report', [DashboardController::class, 'productReport']);

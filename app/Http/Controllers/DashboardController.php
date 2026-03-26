@@ -3,85 +3,101 @@
 namespace App\Http\Controllers;
 
 use App\Models\Expense;
+use App\Models\Product;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    // public function summary(Request $request)
-    // {
-    //     $startDate = $request->start_date
-    //         ? Carbon::parse($request->start_date)->startOfDay()
-    //         : Carbon::now()->startOfMonth();
+    public function dashboard(Request $request)
+    {
+        $startDate = $request->start_date
+            ? Carbon::parse($request->start_date)->startOfDay()
+            : Carbon::now()->startOfMonth();
 
-    //     $endDate = $request->end_date
-    //         ? Carbon::parse($request->end_date)->endOfDay()
-    //         : Carbon::now()->endOfMonth();
+        $endDate = $request->end_date
+            ? Carbon::parse($request->end_date)->endOfDay()
+            : Carbon::now()->endOfMonth();
 
-    //     // Previous period (for percentage comparison)
-    //     $days = $startDate->diffInDays($endDate);
-    //     $prevStart = (clone $startDate)->subDays($days + 1);
-    //     $prevEnd = (clone $endDate)->subDays($days + 1);
+        /*
+        |--------------------------------------------------------------------------
+        | Dashboard Summary
+        |--------------------------------------------------------------------------
+        */
 
-    //     // ===== CURRENT DATA =====
-    //     $totalRevenue = DB::table('orders')
-    //         ->whereBetween('created_at', [$startDate, $endDate])
-    //         ->sum('total');
+        $totalSales = DB::table('orders')
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->sum('total');
 
-    //     $totalOrders = DB::table('orders')
-    //         ->whereBetween('created_at', [$startDate, $endDate])
-    //         ->count();
+        $totalOrders = DB::table('orders')
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->count();
 
-    //     $totalExpenses = DB::table('expenses')
-    //         ->whereBetween('created_at', [$startDate, $endDate])
-    //         ->sum('amount');
+        $newCustomers = DB::table('users')
+            ->join('role_user', 'users.id', '=', 'role_user.user_id')
+            ->join('roles', 'roles.id', '=', 'role_user.role_id')
+            ->where('roles.slug', 'customer')
+            ->whereBetween('users.created_at', [$startDate, $endDate])
+            ->count();
 
-    //     $netProfit = $totalRevenue - $totalExpenses;
+        $lowStockItems = DB::table('products')
+            ->where('quantity', '<=', 20)
+            ->count();
 
-    //     // ===== PREVIOUS DATA =====
-    //     $prevRevenue = DB::table('orders')
-    //         ->whereBetween('created_at', [$prevStart, $prevEnd])
-    //         ->sum('total');
+        /*
+        |--------------------------------------------------------------------------
+        | Latest Orders
+        |--------------------------------------------------------------------------
+        */
 
-    //     $prevOrders = DB::table('orders')
-    //         ->whereBetween('created_at', [$prevStart, $prevEnd])
-    //         ->count();
+        $latestOrders = DB::table('payments')
+            ->join('users', 'users.id', '=', 'payments.user_id')
+            ->select(
+                'payments.order_id',
+                'users.name as customer_name',
+                'payments.created_at as date',
+                'payments.paid_amount',
+                'payments.remaining_amount'
 
-    //     $prevExpenses = DB::table('expenses')
-    //         ->whereBetween('created_at', [$prevStart, $prevEnd])
-    //         ->sum('amount');
+            )
+            ->whereBetween('payments.created_at', [$startDate, $endDate])
+            ->latest('payments.order_id')
+            ->limit(20)
+            ->get();
 
-    //     $prevProfit = $prevRevenue - $prevExpenses;
+        /*
+        |--------------------------------------------------------------------------
+        | Top 30 Selling Products
+        |--------------------------------------------------------------------------
+        */
 
-    //     // ===== PERCENTAGE FUNCTION =====
-    //     $calculateGrowth = function ($current, $previous) {
-    //         if ($previous == 0) {
-    //             return $current > 0 ? 100 : 0;
-    //         }
+        $topProducts = DB::table('order_items')
+            ->join('products', 'products.id', '=', 'order_items.product_id')
+            ->select(
+                'products.id',
+                'products.name',
+                DB::raw('SUM(order_items.quantity) as total_sold')
+            )
+            ->whereBetween('order_items.created_at', [$startDate, $endDate])
+            ->groupBy('products.id', 'products.name')
+            ->orderByDesc('total_sold')
+            ->limit(30)
+            ->get();
 
-    //         return round((($current - $previous) / $previous) * 100, 1);
-    //     };
+        return response()->json([
+            'dashboard_summary' => [
+                'total_sales' => $totalSales,
+                'total_orders' => $totalOrders,
+                'new_customers' => $newCustomers,
+                'low_stock_items' => $lowStockItems,
+            ],
 
-    //     return response()->json([
-    //         'revenue' => [
-    //             'total' => $totalRevenue,
-    //             'growth' => $calculateGrowth($totalRevenue, $prevRevenue),
-    //         ],
-    //         'expenses' => [
-    //             'total' => $totalExpenses,
-    //             'growth' => $calculateGrowth($totalExpenses, $prevExpenses),
-    //         ],
-    //         'profit' => [
-    //             'total' => $netProfit,
-    //             'growth' => $calculateGrowth($netProfit, $prevProfit),
-    //         ],
-    //         'orders' => [
-    //             'total' => $totalOrders,
-    //             'growth' => $calculateGrowth($totalOrders, $prevOrders),
-    //         ],
-    //     ]);
-    // }
+            'latest_orders' => $latestOrders,
+
+            'top_products' => $topProducts,
+        ]);
+    }
 
     public function summary(Request $request)
     {
@@ -223,6 +239,63 @@ class DashboardController extends Controller
                     'Expenses' => $expenceReport,
                 ],
             ],
+        ]);
+    }
+
+    public function overdueCustomers(Request $request)
+    {
+        $overdue = DB::table('users')
+            ->join('payment_histories as ph', 'users.id', '=', 'ph.user_id')
+
+            ->select(
+                'users.id as customer_id',
+                'users.name as customer_name',
+                DB::raw('MAX(CASE WHEN ph.debit > 0 THEN ph.date END) as last_debit'),
+                DB::raw('MAX(CASE WHEN ph.credit > 0 THEN ph.date END) as last_credit'),
+                DB::raw('SUM(ph.debit - ph.credit) as remaining'),
+                DB::raw('DATEDIFF(NOW(), MAX(ph.date)) as days_overdue')
+            )
+
+            ->groupBy('users.id', 'users.name')
+
+            ->havingRaw('remaining > 0')
+            ->havingRaw('DATEDIFF(NOW(), MAX(ph.date)) > 30')
+
+            ->orderByDesc('days_overdue')
+
+            ->paginate(10);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Overdue customers',
+            'data' => $overdue,
+        ]);
+    }
+
+    public function lowStockProducts(Request $request)
+    {
+        $products = Product::select(
+            'id',
+            'name',
+            'sku',
+            'quantity',
+            'selling_price',
+            'buying_price',
+            DB::raw("
+                CASE
+                    WHEN quantity < 10 THEN 'alert quantity less then 10'
+                    WHEN quantity < 20 THEN 'warning quantity less then 20'
+                END as stock_status
+            ")
+        )
+            ->where('quantity', '<', 20)
+            ->orderBy('quantity', 'asc')
+            ->paginate(10);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Low stock products',
+            'data' => $products,
         ]);
     }
 }
