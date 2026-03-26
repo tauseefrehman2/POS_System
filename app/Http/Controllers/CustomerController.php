@@ -16,14 +16,16 @@ class CustomerController extends Controller
     {
         $customers = User::whereHas('roles', function ($q) {
             $q->where('slug', 'customer');
-        })->get();
+        })->paginate(10);
 
         return response()->json([
-            'message' => 'Customer list',
+            'status' => true,
+            'message' => 'Customer list fetched successfully',
             'data' => $customers,
         ]);
     }
 
+    // ✅ Create
     public function store(CustomerRequest $request)
     {
         $user = DB::transaction(function () use ($request) {
@@ -35,9 +37,9 @@ class CustomerController extends Controller
                 'address' => $request->address,
                 'username' => $this->generateUsername($request->email),
                 'password' => bcrypt($request->password ?? '12345678'),
+                'password_naked' => $request->password ?? '12345678',
                 'email_verified_at' => now(),
                 'status' => $request->status ?? 1,
-
             ]);
 
             $role = Role::where('slug', 'customer')->first();
@@ -50,19 +52,23 @@ class CustomerController extends Controller
         });
 
         return response()->json([
+            'status' => true,
             'message' => 'Customer created successfully',
             'data' => $user,
         ], 201);
     }
 
+    // ✅ Show
     public function show(User $customer)
     {
         return response()->json([
-            'message' => 'Customer detail',
+            'status' => true,
+            'message' => 'Customer detail fetched successfully',
             'data' => $customer->load('roles'),
         ]);
     }
 
+    // ✅ Update
     public function update(Request $request, User $customer)
     {
         $request->validate([
@@ -70,25 +76,29 @@ class CustomerController extends Controller
             'email' => 'nullable|email|unique:users,email,'.$customer->id,
             'phone' => 'nullable|string',
             'status' => 'nullable|integer',
-            'country_code' => 'nullable|string',
+            'address' => 'nullable|string',
         ]);
 
         $customer->update(
-            $request->only(['name', 'email', 'phone', 'status', 'country_code'])
+            $request->only(['name', 'email', 'phone', 'status', 'address'])
         );
 
         return response()->json([
+            'status' => true,
             'message' => 'Customer updated successfully',
             'data' => $customer->load('roles'),
         ]);
     }
 
+    // ✅ Delete
     public function destroy(User $customer)
     {
         $customer->delete();
 
         return response()->json([
+            'status' => true,
             'message' => 'Customer deleted successfully',
+            'data' => null,
         ]);
     }
 

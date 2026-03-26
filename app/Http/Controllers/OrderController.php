@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\PaymentHistory;
 use App\Models\Product;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use jeremykenedy\LaravelRoles\Models\Role;
@@ -428,13 +429,45 @@ class OrderController extends Controller
         ], 201);
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $orders = Order::with('items')->paginate(10);
+        $orders = Order::with('items')
+
+            // search
+            ->when($request->search, function ($q) use ($request) {
+                $search = $request->search;
+
+                $q->where(function ($query) use ($search) {
+                    $query->where('id', $search)
+                        ->orWhere('order_sereal_no', 'like', "%{$search}%")
+                        ->orWhere('user_id', $search)
+                        ->orWhere('subtotal', 'like', "%{$search}%")
+                        ->orWhere('total', 'like', "%{$search}%");
+                });
+            })
+
+            // date filter (FIXED)
+            ->when($request->start_date && $request->end_date, function ($q) use ($request) {
+
+                $start = Carbon::parse($request->start_date)->startOfDay();
+                $end = Carbon::parse($request->end_date)->endOfDay();
+
+                $q->whereBetween('created_at', [$start, $end]);
+            })
+
+            ->latest()
+            ->paginate(10);
+
+        if ($orders->total() == 0) {
+            return response()->json([
+                'message' => 'No orders found',
+                'data' => [],
+            ], 404);
+        }
 
         return response()->json([
             'message' => 'Order Fetched Successfully',
             'data' => $orders,
-        ], 201);
+        ], 200);
     }
 }

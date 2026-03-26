@@ -15,16 +15,14 @@ class PurchaseController extends Controller
     {
         $request->validate([
             'supplier_id' => 'required|integer|exists:users,id',
+            'paid_amount' => 'nullable|numeric|min:0',
+            'payment_method' => 'nullable|string',
+
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'nullable|integer|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
             'items.*.product_name' => 'required_if:items.*.product_id,null|string|max:255',
-            'items.*.sku' => 'nullable|string|max:255',
-            'items.*.product_category_id' => 'nullable|integer|exists:product_categories,id',
-            'items.*.product_brand_id' => 'nullable|integer|exists:product_brands,id',
-            'items.*.buying_price' => 'nullable|numeric|min:0',
-            'items.*.selling_price' => 'nullable|numeric|min:0',
         ]);
 
         $purchase = DB::transaction(function () use ($request) {
@@ -38,52 +36,63 @@ class PurchaseController extends Controller
                 $qty = (int) $it['quantity'];
 
                 if (! empty($it['product_id'])) {
-
                     $product = Product::findOrFail($it['product_id']);
-
                 } else {
-
                     $product = Product::create([
                         'name' => $it['product_name'],
                         'slug' => Str::slug($it['product_name']),
                         'sku' => $it['sku'] ?? null,
-                        'product_category_id' => $it['product_category_id'] ?? null,
-                        'product_brand_id' => $it['product_brand_id'] ?? null,
-                        'buying_price' => $it['buying_price'] ?? $price,
-                        'selling_price' => $it['selling_price'] ?? $price,
-                        'variation_price' => $it['variation_price'] ?? null,
-                        'status' => true,
-                        'order' => 0,
+                        'buying_price' => $price,
+                        'selling_price' => $price,
                         'quantity' => 0,
-                        'show_stock_out' => false,
-                        'maximum_purchase_quantity' => 1,
-                        'low_stock_quantity_warning' => 1,
-                        'refundable' => false,
-                        'description' => $it['description'] ?? null,
-                        'shipping_and_return' => $it['shipping_and_return'] ?? null,
-                        'add_to_flash_sale' => false,
-                        'discount' => $it['discount'] ?? null,
-                        'offer_start_date' => $it['offer_start_date'] ?? null,
-                        'offer_end_date' => $it['offer_end_date'] ?? null,
-                        'shipping_cost' => $it['shipping_cost'] ?? null,
-                        'is_product_quantity_multiply' => false,
-                        'barcode_id' => $it['barcode_id'] ?? null,
                     ]);
                 }
 
-                // increment stock
                 $product->increment('quantity', $qty);
 
-                // store product for second loop
                 $products[$key] = $product;
 
                 $subtotal += $price * $qty;
             }
 
+            // ✅ payment logic
+            $paidAmount = $request->paid_amount ?? 0;
+            $remaining = $subtotal - $paidAmount;
+
+            if ($paidAmount == 0) {
+                $paymentStatus = 'unpaid';
+            } elseif ($paidAmount >= $subtotal) {
+                $paymentStatus = 'paid';
+                $remaining = 0;
+            } else {
+                $paymentStatus = 'partial';
+            }
+
             $purchase = Purchase::create([
                 'supplier_id' => $request->supplier_id,
                 'total_amount' => $subtotal,
+                'paid_amount' => $paidAmount,
+                'payment_status' => $paymentStatus,
+                'payment_method' => $request->payment_method,
                 'purchase_serial_no' => 'PUR'.time().rand(100, 999),
+            ]);
+
+            // ✅ add ONLY remaining to supplier
+            if ($remaining > 0) {
+                DB::table('users')
+                    ->where('id', $request->supplier_id)
+                    ->increment('remaining_amount', $remaining);
+            }
+
+            // ✅ payment history
+            DB::table('supplier_payment_histories')->insert([
+                'date' => now(),
+                'payment_name' => 'purchase_'.$purchase->id,
+                'supplier_id' => $request->supplier_id,
+                'credit' => $paidAmount, // paid
+                'debit' => $remaining,   // remaining
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
             foreach ($request->items as $key => $it) {
@@ -99,29 +108,6 @@ class PurchaseController extends Controller
                     'price' => $price,
                     'total' => $price * $qty,
                     'product_name' => $product->name,
-                    'slug' => $product->slug,
-                    'sku' => $product->sku,
-                    'product_category_id' => $product->product_category_id,
-                    'product_brand_id' => $product->product_brand_id,
-                    'buying_price' => $product->buying_price,
-                    'selling_price' => $product->selling_price,
-                    'variation_price' => $product->variation_price,
-                    'status' => $product->status,
-                    'order' => $product->order,
-                    'product_quantity' => $product->quantity,
-                    'show_stock_out' => $product->show_stock_out,
-                    'maximum_purchase_quantity' => $product->maximum_purchase_quantity,
-                    'low_stock_quantity_warning' => $product->low_stock_quantity_warning,
-                    'refundable' => $product->refundable,
-                    'description' => $product->description,
-                    'shipping_and_return' => $product->shipping_and_return,
-                    'add_to_flash_sale' => $product->add_to_flash_sale,
-                    'discount' => $product->discount,
-                    'offer_start_date' => $product->offer_start_date,
-                    'offer_end_date' => $product->offer_end_date,
-                    'shipping_cost' => $product->shipping_cost,
-                    'is_product_quantity_multiply' => $product->is_product_quantity_multiply,
-                    'barcode' => $product->barcode,
                 ]);
             }
 
@@ -136,7 +122,7 @@ class PurchaseController extends Controller
 
     public function index($id)
     {
-        $purchase = Purchase::where('supplier_id', $id)->with('items    ')->get();
+        $purchase = Purchase::where('supplier_id', $id)->with('items')->get();
 
         return response()->json([
             'message' => 'purchase list for supplier',

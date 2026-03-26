@@ -2,10 +2,22 @@
 
 namespace App\Http\Requests;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 class SupplierRequest extends FormRequest
 {
+    protected function failedValidation(Validator $validator)
+    {
+        $errors = $validator->errors()->first(); // 🔥 only first error
+
+        throw new HttpResponseException(response()->json([
+            'status' => false,
+            'message' => $errors,
+        ], 422));
+    }
+
     /**
      * Determine if the user is authorized to make this request.
      */

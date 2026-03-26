@@ -6,6 +6,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\OrderRefundController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProductBrandController;
@@ -14,6 +15,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\SupplierPaymentController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('register', [AuthController::class, 'register']);
@@ -21,6 +23,10 @@ Route::post('login', [AuthController::class, 'login']);
 Route::get('/customers/filter', [CustomerController::class, 'filter']);
 
 Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/supplier/payment/history/{id}', [SupplierPaymentController::class, 'history']);
+    Route::post('/supplier/payment', [SupplierPaymentController::class, 'store']);
+    Route::get('/users/payment-history', [PaymentController::class, 'userPaymentHistory']);
+
     Route::get('/dashboard-summary', [DashboardController::class, 'summary']);
     Route::get('/sales-report', [DashboardController::class, 'salesReport']);
     Route::get('/cashier-report', [DashboardController::class, 'cashierReport']);
@@ -35,6 +41,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::resource('orders', OrderController::class);
     Route::get('/get/order', [OrderController::class, 'index']);
     Route::get('/supplier/order/{id}', [PurchaseController::class, 'index']);
+    Route::post('/orders/refund', [OrderRefundController::class, 'store']);
+    Route::get('/list/order/refunded', [OrderRefundController::class, 'list']);
 
     // payments
     Route::post('payments/update', [PaymentController::class, 'updatePayment']);
@@ -51,7 +59,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('me', [AuthController::class, 'me']);
     Route::post('refresh', [AuthController::class, 'refresh']);
     Route::post('purchases', [PurchaseController::class, 'store']);
-
 });
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 

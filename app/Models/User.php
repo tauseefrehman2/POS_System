@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -139,5 +140,15 @@ class User extends Authenticatable
             ->whereNull(config('roles.rolesTable').'.deleted_at')
             ->whereIn(config('roles.rolesTable').'.id', $this->getRoles()->pluck('id')->toArray())
             ->groupBy([$permissionTable.'.id', $permissionTable.'.name', $permissionTable.'.slug', $permissionTable.'.created_at', $permissionTable.'.updated_at', $permissionTable.'.deleted_at', 'pivot_created_at', 'pivot_updated_at']);
+    }
+
+    public function supplierPayments()
+    {
+        return $this->hasMany(SupplierPayment::class, 'supplier_id');
+    }
+
+    public function SupplierpaymentHistories()
+    {
+        return $this->hasMany(SupplierPaymentHistory::class);
     }
 }

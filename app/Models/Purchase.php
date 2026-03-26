@@ -14,6 +14,9 @@ class Purchase extends Model
         'user_id',
         'total_amount',
         'purchase_serial_no',
+        'payment_method',
+        'paid_amount',
+        'payment_status',
     ];
 
     public function items()

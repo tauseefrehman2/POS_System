@@ -47,43 +47,43 @@ class PaymentController extends Controller
         try {
 
             // user ke pending payments find karo
-            $payments = Payment::where('user_id', $userId)
-                ->where('remaining_amount', '>', 0)
-                ->orderBy('created_at', 'asc')
-                ->get();
+            // $payments = Payment::where('user_id', $userId)
+            //     ->where('remaining_amount', '>', 0)
+            //     ->orderBy('created_at', 'asc')
+            //     ->get();
 
-            if ($payments->isEmpty()) {
-                return response()->json([
-                    'message' => 'No remaining payment found for this user',
-                ], 404);
-            }
+            // if ($payments->isEmpty()) {
+            //     return response()->json([
+            //         'message' => 'No remaining payment found for this user',
+            //     ], 404);
+            // }
 
             $originalAmount = $amount;
 
-            foreach ($payments as $payment) {
+            // foreach ($payments as $payment) {
 
-                if ($amount <= 0) {
-                    break;
-                }
+            //     if ($amount <= 0) {
+            //         break;
+            //     }
 
-                // agar payment remaining se zyada hai
-                if ($amount >= $payment->remaining_amount) {
+            //     // agar payment remaining se zyada hai
+            //     if ($amount >= $payment->remaining_amount) {
 
-                    $amount -= $payment->remaining_amount;
+            //         $amount -= $payment->remaining_amount;
 
-                    $payment->paid_amount += $payment->remaining_amount;
-                    $payment->remaining_amount = 0;
+            //         $payment->paid_amount += $payment->remaining_amount;
+            //         $payment->remaining_amount = 0;
 
-                } else {
+            //     } else {
 
-                    $payment->paid_amount += $amount;
-                    $payment->remaining_amount -= $amount;
+            //         $payment->paid_amount += $amount;
+            //         $payment->remaining_amount -= $amount;
 
-                    $amount = 0;
-                }
+            //         $amount = 0;
+            //     }
 
-                $payment->save();
-            }
+            //     $payment->save();
+            // }
 
             // user remaining update
             $user = User::find($userId);
@@ -116,5 +116,41 @@ class PaymentController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function UserPaymentHistory(Request $request)
+    {
+        // check user if id provided
+        if ($request->id) {
+            $user = User::find($request->id);
+
+            if (! $user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'User not found',
+                    'data' => null,
+                ], 404);
+            }
+        }
+
+        $history = PaymentHistory::when($request->id, function ($q) use ($request) {
+            $q->where('user_id', $request->id);
+        })
+            ->latest()
+            ->paginate(10);
+
+        if ($history->total() == 0) {
+            return response()->json([
+                'status' => true,
+                'message' => 'No payment history found',
+                'data' => [],
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'User Payment History fetched successfully',
+            'data' => $history,
+        ]);
     }
 }

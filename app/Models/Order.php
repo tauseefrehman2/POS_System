@@ -23,6 +23,7 @@ class Order extends Model
         'status',
         'active',
         'reason',
+        'refund_status',
         'source',
     ];
 
@@ -37,5 +38,22 @@ class Order extends Model
     public function payment()
     {
         return $this->hasOne(Payment::class);
+    }
+
+    public function refunds()
+    {
+        return $this->hasMany(OrderRefund::class);
+    }
+
+    public function refundItems()
+    {
+        return $this->hasManyThrough(
+            OrderRefundItem::class,
+            OrderRefund::class,
+            'order_id',   // FK on order_refunds
+            'refund_id',  // FK on order_refund_items
+            'id',         // PK on orders
+            'id'          // PK on order_refunds
+        );
     }
 }
